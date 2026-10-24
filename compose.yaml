@@ -1,0 +1,93 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command:
+      - uvicorn
+      - backend.main:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+    env_file:
+      - .env
+    environment:
+      UPLOAD_DIR: /app/data/uploads
+      FAISS_INDEX_DIR: /app/data/faiss
+      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-25}
+    volumes:
+      - uploads:/app/data/uploads
+      - faiss-index:/app/data/faiss
+    expose:
+      - "8000"
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    init: true
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command:
+      - streamlit
+      - run
+      - frontend/app.py
+      - --server.address
+      - 0.0.0.0
+      - --server.port
+      - "8501"
+      - --server.headless
+      - "true"
+    environment:
+      BACKEND_URL: http://backend:8000
+      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-25}
+    expose:
+      - "8501"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8501/_stcore/health', timeout=3)"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    init: true
+
+  caddy:
+    image: caddy:2-alpine
+    environment:
+      PUBLIC_DOMAIN: ${PUBLIC_DOMAIN:?Set PUBLIC_DOMAIN to your domain in .env}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      frontend:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  uploads:
+  faiss-index:
+  caddy-data:
+  caddy-config:
