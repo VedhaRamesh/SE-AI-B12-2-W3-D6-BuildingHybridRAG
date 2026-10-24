@@ -1,0 +1,38 @@
+version: "3.8"
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: rag-backend
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    restart: unless-stopped
+    volumes:
+      - faiss_data:/app/data/faiss
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    container_name: rag-frontend
+    ports:
+      - "8501:8501"
+    environment:
+      # This tells Streamlit how to route internal traffic to the backend container
+      - BACKEND_URL=http://backend:8000 
+    env_file:
+      - .env
+    depends_on:
+      - backend
+    restart: unless-stopped
+    volumes:
+      - upload_data:/app/data/uploads
+
+# Persistent volumes so you don't lose vector data when containers restart
+volumes:
+  faiss_data:
+  upload_data:
